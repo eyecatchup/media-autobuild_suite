@@ -67,7 +67,7 @@ set mingwpackages=cmake dlfcn doxygen libpng gcc nasm pcre tools-git yasm ninja 
 
 set ffmpeg_options=--enable-avisynth --enable-gcrypt --enable-libmp3lame ^
 --enable-libopus --enable-libvorbis --enable-libvpx --enable-libx264 --enable-libx265 ^
---enable-cuda --enable-cuvid --enable-schannel --enable-sdl2
+--enable-cuda --enable-cuvid --enable-schannel
 
 set ffmpeg_options_zeranoe=--enable-decklink --enable-fontconfig ^
 --enable-frei0r --enable-gnutls --enable-libass --enable-libbluray --enable-libbs2b ^
@@ -83,7 +83,7 @@ set ffmpeg_options_full=--enable-opencl --enable-opengl --enable-libcdio ^
 --enable-libfdk-aac --enable-libkvazaar --enable-librubberband ^
 --enable-libssh --enable-libtesseract --enable-libzvbi ^
 --enable-chromaprint --enable-libopenh264 --enable-libopenmpt ^
---enable-netcdf --enable-libnpp
+--enable-netcdf --enable-libnpp --enable-sdl2
 
 set mpv_options=--enable-dvdread --enable-dvdnav --enable-libbluray --enable-libass --enable-rubberband ^
 --enable-lua --enable-uchardet --enable-libarchive --enable-lcms2 --disable-debug-build ^
@@ -536,10 +536,10 @@ if %ffmpegBINI%==0 (
     ) else set buildffmpeg=%ffmpegBINI%
 if %deleteINI%==1 set "writeFF=yes"
 
-if %buildffmpeg%==1 set "ffmpeg=y"
-if %buildffmpeg%==2 set "ffmpeg=n"
-if %buildffmpeg%==3 set "ffmpeg=s"
-if %buildffmpeg%==4 set "ffmpeg=b"
+if %buildffmpeg%==1 set "ffmpeg=static"
+if %buildffmpeg%==2 set "ffmpeg=no"
+if %buildffmpeg%==3 set "ffmpeg=shared"
+if %buildffmpeg%==4 set "ffmpeg=both"
 if %buildffmpeg% GTR 4 GOTO ffmpeg
 if %writeFF%==yes echo.ffmpegB=^%buildffmpeg%>>%ini%
 

@@ -553,21 +553,33 @@ do_pkgConfig() {
     fi
 }
 
+do_readlines() {
+    local filename="$1"
+    local varname="$2"
+    if [[ -f "$filename" ]]; then
+        IFS=$'\n' read -d '' -r -a "$varname" < <(cat "$filename" | dos2unix | sed "s;#.*$;;g")
+    else
+        echo -e "${red}Tried opening non-existent file: ${filename}${reset}"
+        exit 1
+    fi
+}
+
 do_getFFmpegConfig() {
     local license="${1:-nonfree}"
     local configfile="$LOCALBUILDDIR"/ffmpeg_options.txt
     if [[ -f "$configfile" ]] && [[ $ffmpegChoice = y ]]; then
-        FFMPEG_DEFAULT_OPTS=($(sed -e 's:\\::g' -e 's/#.*//' "$configfile" | tr '\n' ' '))
+        do_readlines "$configfile" FFMPEG_DEFAULT_OPTS
         echo "Imported FFmpeg options from ffmpeg_options.txt"
     elif [[ -f "/trunk/media-autobuild_suite.bat" && $ffmpegChoice && $ffmpegChoice != y ]]; then
-        FFMPEG_DEFAULT_OPTS=($(sed -rne '/ffmpeg_options=/,/[^^]$/p' /trunk/media-autobuild_suite.bat | \
-            sed -e 's/.*ffmpeg_options=//' -e 's/ ^//g' | tr '\n' ' '))
+        do_readlines /trunk/media-autobuild_suite.bat bat
+        FFMPEG_DEFAULT_OPTS=($(printf '%s\n' "${bat[@]}" | \
+            sed -rne '/ffmpeg_options=/,/[^^]$/p' | sed -e 's/.*ffmpeg_options=//' -e 's/ ^//g'))
         [[ $ffmpegChoice = z || $ffmpegChoice = f ]] &&
-            FFMPEG_DEFAULT_OPTS+=($(sed -rne '/ffmpeg_options_zeranoe=/,/[^^]$/p' /trunk/media-autobuild_suite.bat | \
-                sed -e 's/.*ffmpeg_options_zeranoe=//' -e 's/ ^//g' | tr '\n' ' '))
+            FFMPEG_DEFAULT_OPTS+=($(printf '%s\n' "${bat[@]}" | \
+                sed -rne '/ffmpeg_options_zeranoe=/,/[^^]$/p' | sed -e 's/.*ffmpeg_options_zeranoe=//' -e 's/ ^//g'))
         [[ $ffmpegChoice = f ]] &&
-            FFMPEG_DEFAULT_OPTS+=($(sed -rne '/ffmpeg_options_full=/,/[^^]$/p' /trunk/media-autobuild_suite.bat | \
-                sed -e 's/.*ffmpeg_options_full=//' -e 's/ ^//g' | tr '\n' ' '))
+            FFMPEG_DEFAULT_OPTS+=($(printf '%s\n' "${bat[@]}" | \
+                sed -rne '/ffmpeg_options_full=/,/[^^]$/p' | sed -e 's/.*ffmpeg_options_full=//' -e 's/ ^//g'))
         echo "Imported default FFmpeg options from .bat"
     else
         echo "Using default FFmpeg options"
@@ -639,7 +651,7 @@ do_changeFFmpegConfig() {
     fi
 
     # handle (l)gplv3 libs
-    local version3=(libopencore-amr{wb,nb} libvo-amrwbenc gmp)
+    local version3=(libopencore-amr{wb,nb} libvo-amrwbenc gmp libcdio)
     if [[ $license = *v3 || $license = nonfree ]] && enabled_any "${version3[@]}"; then
         do_addOption --enable-version3
     else
@@ -668,7 +680,7 @@ do_changeFFmpegConfig() {
 
     enabled frei0r && do_addOption --enable-filter=frei0r
 
-    if enabled debug; then
+    if enabled_any debug "debug=gdb"; then
         # fix issue with ffprobe not working with debug and strip
         do_addOption --disable-stripping
     else
@@ -692,10 +704,13 @@ do_changeFFmpegConfig() {
         fi
     fi
 
+    # fuck sdl2, broken PoS
+    enabled_any sdl2 ffplay || do_addOption --disable-sdl2
+
     # remove libs that don't work with shared
-    if [[ $ffmpeg = "s" || $ffmpeg = "b" ]]; then
+    if [[ $ffmpeg = "shared" || $ffmpeg = "both" ]]; then
         FFMPEG_OPTS_SHARED=("${FFMPEG_OPTS[@]}")
-        do_removeOption "--enable-(decklink|libgme|sdl2)" y
+        do_removeOption "--enable-(decklink|libgme|sdl2|ffplay)" y
         do_addOption FFMPEG_OPTS_SHARED --disable-sdl2
     fi
 }
@@ -755,11 +770,12 @@ do_getMpvConfig() {
     local configfile="$LOCALBUILDDIR"/mpv_options.txt
     local forced
     if [[ -f $configfile ]] && [[ $ffmpegChoice = y ]]; then
-        MPV_OPTS=($(sed -e 's:\\::g' -e 's/#.*//' "$configfile" | tr '\n' ' '))
+        do_readlines "$configfile" MPV_OPTS
         echo "Imported mpv options from mpv_options.txt"
     elif [[ -f "/trunk/media-autobuild_suite.bat" && x"$ffmpegChoice" != x"y" ]]; then
-        MPV_OPTS=($(sed -rne '/mpv_options=/,/[^^]$/p' /trunk/media-autobuild_suite.bat | \
-            sed -e 's/.*mpv_options=//' -e 's/ ^//g' | tr '\n' ' '))
+        [[ -z "$bat" ]] && do_readlines /trunk/media-autobuild_suite.bat bat
+        MPV_OPTS=($(printf '%s\n' "${bat[@]}" | \
+            sed -rne '/mpv_options=/,/[^^]$/p' | sed -e 's/.*mpv_options=//' -e 's/ ^//g'))
         echo "Imported default mpv options from .bat"
     else
         MPV_OPTS=()
@@ -844,13 +860,17 @@ do_addOption() {
 }
 
 do_removeOption() {
-    local option=$1
-    local shared=$2
-    if [[ $shared = "y" ]]; then
-        FFMPEG_OPTS_SHARED=($(echo "${FFMPEG_OPTS_SHARED[*]}" | sed -r "s/ *$option//g"))
-    else
-        FFMPEG_OPTS=($(echo "${FFMPEG_OPTS[*]}" | sed -r "s/ *$option//g"))
-    fi
+    local option="$1"
+    local arrayname="FFMPEG_OPTS" basearray opt temp=()
+    [[ "$2" = "y" ]] && arrayname="FFMPEG_OPTS_SHARED"
+    basearray="${arrayname}[@]"
+
+    for opt in "${!basearray}"; do
+        if [[ ! "$opt" =~ ^${option}$ ]]; then
+            temp+=("$opt")
+        fi
+    done
+    eval "$arrayname"=\("\${temp[@]}"\)
 }
 
 do_removeOptions() {
@@ -973,7 +993,8 @@ log() {
     [[ $quiet ]] || do_print_progress Running "$name"
     [[ $_cmd =~ ^(make|ninja)$ ]] && extra="-j$cpuCount"
     if [[ $logging != "n" ]]; then
-        echo "$_cmd $*" > "ab-suite.$name.log"
+        echo -e "CFLAGS: $CFLAGS\nLDFLAGS: $LDFLAGS" > "ab-suite.$name.log"
+        echo "$_cmd $*" >> "ab-suite.$name.log"
         $_cmd $extra "$@" >> "ab-suite.$name.log" 2>&1 ||
             { [[ $extra ]] && $_cmd -j1 "$@" >> "ab-suite.$name.log" 2>&1; } ||
             compilation_fail "$name"

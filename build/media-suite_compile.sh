@@ -109,11 +109,15 @@ if [[ -n "$alloptions" ]]; then
     unset alloptions
 fi
 
+# In case a build was interrupted before reversing hide_conflicting_libs
+hide_conflicting_libs -R
+do_hide_all_sharedlibs
+
 set_title "compiling global tools"
 echo -e "\n\t${orange}Starting $bits compilation of global tools${reset}"
 
 if [[ "$mplayer" = "y" ]] || ! mpv_disabled libass ||
-    { [[ $ffmpeg != "n" ]] && enabled_any libass libfreetype {lib,}fontconfig libfribidi; }; then
+    { [[ $ffmpeg != "no" ]] && enabled_any libass libfreetype {lib,}fontconfig libfribidi; }; then
     do_pacman_remove freetype fontconfig harfbuzz fribidi
 
     _check=(libfreetype.{l,}a freetype2.pc)
@@ -177,7 +181,7 @@ fi
 
 _check=(bin-global/libgcrypt-config libgcrypt.a gcrypt.h)
 _ver="1.7.3"
-if [[ $ffmpeg != n ]] && enabled gcrypt; then
+if [[ $ffmpeg != "no" ]] && enabled gcrypt; then
     do_pacman_install libgpg-error
     do_pacman_remove libgcrypt
     if files_exist "${_check[@]}" && [[ "$(libgcrypt-config --version)" = "$_ver" ]]; then
@@ -198,7 +202,7 @@ if [[ $ffmpeg != n ]] && enabled gcrypt; then
     fi
 fi
 
-if { { [[ $ffmpeg != n ]] && enabled gnutls; } ||
+if { { [[ $ffmpeg != "no" ]] && enabled gnutls; } ||
     [[ $rtmpdump = y && $license != nonfree ]]; }; then
     [[ -z "$gnutls_ver" ]] &&
         gnutls_ver="$("${curl_opts[@]}" -l "ftp://ftp.gnutls.org/gcrypt/gnutls/v3.5/")" &&
@@ -222,7 +226,7 @@ if { { [[ $ffmpeg != n ]] && enabled gnutls; } ||
         sed -ri "s;($LOCALDESTDIR|$MINGW_PREFIX)/lib/lib(\w+).a;-l\2;g" "$(file_installed gnutls.pc)"
 fi
 
-if { { [[ $ffmpeg != n ]] && enabled openssl; } ||
+if { { [[ $ffmpeg != "no" ]] && enabled openssl; } ||
     [[ $rtmpdump = y && $license = nonfree ]]; }; then
     [[ ! "$libressl_ver" ]] &&
         libressl_ver="$(clean_html_index "http://ftp.openbsd.org/pub/OpenBSD/LibreSSL/")" &&
@@ -246,7 +250,7 @@ fi
 [[ ! "$curl_ver" ]] &&
     curl_ver="$(clean_html_index https://curl.haxx.se/download/)" &&
     curl_ver="$(get_last_version "$curl_ver" bz2 "7\.\d+\.\d")"
-curl_ver="${curl_ver:-7.51.0}"
+curl_ver="${curl_ver:-7.53.0}"
 _check=(curl/curl.h libcurl.{{,l}a,pc})
 _deps=()
 enabled openssl && _deps+=(libssl.a)
@@ -257,6 +261,7 @@ if [[ $mediainfo = y || $bmx = y ]] && do_pkgConfig "libcurl = $curl_ver"; then
     do_wget "https://curl.haxx.se/download/curl-${curl_ver}.tar.bz2"
     do_uninstall include/curl bin-global/curl-config "${_check[@]}"
     [[ $standalone = y ]] || sed -ri "s;(^SUBDIRS = lib) src (include) scripts;\1 \2;" Makefile.in
+    do_patch curl-fixbuild-sspi.patch
     extra_opts=()
     if enabled openssl; then
         extra_opts+=(--with-{ssl,nghttp2} --without-gnutls)
@@ -271,7 +276,7 @@ if [[ $mediainfo = y || $bmx = y ]] && do_pkgConfig "libcurl = $curl_ver"; then
     hide_conflicting_libs
     CPPFLAGS+=" -DNGHTTP2_STATICLIB" \
         do_separate_confmakeinstall global "${extra_opts[@]}" \
-        --without-{libssh2,random,ca-bundle,ca-path,librtmp,libidn} \
+        --without-{libssh2,random,ca-bundle,ca-path,librtmp,libidn2} \
         --enable-sspi --disable-{debug,manual}
     hide_conflicting_libs -R
     _notrequired=yes
@@ -285,7 +290,7 @@ fi
 _check=(libwebp{,mux}.{{,l}a,pc})
 [[ $standalone = y ]] && _check+=(libwebp{demux,decoder}.{{,l}a,pc}
     bin-global/{{c,d}webp,webpmux,img2webp}.exe)
-if [[ $ffmpeg != n || $standalone = y ]] && enabled libwebp &&
+if [[ $ffmpeg != "no" || $standalone = y ]] && enabled libwebp &&
     do_vcs "https://chromium.googlesource.com/webm/libwebp"; then
     do_pacman_install libtiff
     if [[ $standalone = y ]]; then
@@ -304,7 +309,7 @@ fi
 
 syspath=$(cygpath -S)
 [[ $bits = "32bit" && -d "$syspath/../SysWOW64" ]] && syspath="$syspath/../SysWOW64"
-if [[ $ffmpeg != n ]] && enabled opencl && [[ -f "$syspath/OpenCL.dll" ]]; then
+if [[ $ffmpeg != "no" ]] && enabled opencl && [[ -f "$syspath/OpenCL.dll" ]]; then
     echo -e "${orange}FFmpeg and related apps will depend on OpenCL.dll${reset}"
     _check=(libOpenCL.a)
     do_pacman_install opencl-headers
@@ -323,7 +328,7 @@ else
 fi
 unset syspath
 
-if [[ $ffmpeg != n || $standalone = y ]] && enabled libtesseract; then
+if [[ $ffmpeg != "no" || $standalone = y ]] && enabled libtesseract; then
     do_pacman_remove tesseract-ocr
     do_pacman_install libtiff
     _check=(liblept.{,l}a lept.pc)
@@ -358,7 +363,7 @@ if [[ $ffmpeg != n || $standalone = y ]] && enabled libtesseract; then
 fi
 
 _check=(librubberband.a rubberband.pc rubberband/{rubberband-c,RubberBandStretcher}.h)
-if { { [[ $ffmpeg != "n" ]] && enabled librubberband; } ||
+if { { [[ $ffmpeg != "no" ]] && enabled librubberband; } ||
     ! mpv_disabled rubberband; } && do_pkgConfig "rubberband = 1.8.1" &&
     do_vcs https://github.com/lachs0r/rubberband.git; then
     do_uninstall "${_check[@]}"
@@ -369,7 +374,7 @@ if { { [[ $ffmpeg != "n" ]] && enabled librubberband; } ||
 fi
 
 _check=(zimg{.h,++.hpp} libzimg.{,l}a zimg.pc)
-if { { [[ $ffmpeg != "n" ]] && enabled libzimg; } ||
+if { { [[ $ffmpeg != "no" ]] && enabled libzimg; } ||
     { ! pc_exists zimg && ! mpv_disabled vapoursynth; }; } &&
     do_vcs "https://github.com/sekrit-twc/zimg.git"; then
     do_uninstall "${_check[@]}"
@@ -382,7 +387,7 @@ fi
 set_title "compiling audio tools"
 echo -e "\n\t${orange}Starting $bits compilation of audio tools${reset}"
 
-if [[ $ffmpeg != "n" || $sox = y ]]; then
+if [[ $ffmpeg != "no" || $sox = y ]]; then
     enabled libwavpack && do_pacman_install wavpack
     enabled_any libopencore-amr{wb,nb} && do_pacman_install opencore-amr
     if enabled libtwolame; then
@@ -393,7 +398,7 @@ if [[ $ffmpeg != "n" || $sox = y ]]; then
 fi
 
 _check=(ilbc.h libilbc.{{l,}a,pc})
-if [[ $ffmpeg != "n" ]] && enabled libilbc && do_pkgConfig "libilbc = 2.0.3-dev" &&
+if [[ $ffmpeg != "no" ]] && enabled libilbc && do_pkgConfig "libilbc = 2.0.3-dev" &&
     do_vcs "https://github.com/TimothyGu/libilbc.git"; then
     do_autoreconf
     do_uninstall "${_check[@]}"
@@ -437,7 +442,7 @@ elif [[ $sox = y ]] || { [[ $standalone = y ]] && enabled_any libvorbis libopus;
 fi
 
 _check=(libvo-amrwbenc.{l,}a vo-amrwbenc.pc)
-if [[ $ffmpeg != n ]] && enabled libvo-amrwbenc &&
+if [[ $ffmpeg != "no" ]] && enabled libvo-amrwbenc &&
     do_pkgConfig "vo-amrwbenc = 0.1.3"; then
     do_wget_sf -h f63bb92bde0b1583cb3cb344c12922e0 \
         "opencore-amr/vo-amrwbenc/vo-amrwbenc-0.1.3.tar.gz"
@@ -446,7 +451,7 @@ if [[ $ffmpeg != n ]] && enabled libvo-amrwbenc &&
     do_checkIfExist
 fi
 
-if { [[ $ffmpeg != n ]] && enabled libfdk-aac; } || [[ $fdkaac = "y" ]]; then
+if { [[ $ffmpeg != "no" ]] && enabled libfdk-aac; } || [[ $fdkaac = "y" ]]; then
     _check=(libfdk-aac.{l,}a fdk-aac.pc)
     if do_vcs "https://github.com/mstorsjo/fdk-aac"; then
         do_autoreconf
@@ -518,9 +523,9 @@ if [[ $standalone = y ]] && enabled libopus &&
     do_checkIfExist
 fi
 
-if [[ $ffmpeg != "n" ]] && enabled libsoxr; then
+if [[ $ffmpeg != "no" ]] && enabled libsoxr; then
     _check=(soxr.h libsoxr.a)
-    if do_vcs git://git.code.sf.net/p/soxr/code libsoxr; then
+    if do_vcs https://notabug.org/RiCON/soxr.git libsoxr; then
         do_uninstall "${_check[@]}"
         do_cmakeinstall -DWITH_LSR_BINDINGS=off -DBUILD_TESTS=off
         do_checkIfExist
@@ -545,7 +550,7 @@ if [[ $standalone = y ]] && enabled libmp3lame; then
 fi
 
 _check=(libgme.{a,pc})
-if [[ $ffmpeg != "n" ]] && enabled libgme && do_pkgConfig "libgme = 0.6.1" &&
+if [[ $ffmpeg != "no" ]] && enabled libgme && do_pkgConfig "libgme = 0.6.1" &&
     do_vcs "https://bitbucket.org/mpyne/game-music-emu.git" libgme; then
     do_uninstall include/gme "${_check[@]}"
     do_cmakeinstall -DENABLE_UBSAN=off
@@ -554,7 +559,7 @@ if [[ $ffmpeg != "n" ]] && enabled libgme && do_pkgConfig "libgme = 0.6.1" &&
 fi
 
 _check=(libbs2b.{{l,}a,pc})
-if [[ $ffmpeg != "n" ]] && enabled libbs2b && do_pkgConfig "libbs2b = 3.1.0"; then
+if [[ $ffmpeg != "no" ]] && enabled libbs2b && do_pkgConfig "libbs2b = 3.1.0"; then
     do_wget_sf -h c1486531d9e23cf34a1892ec8d8bfc06 "bs2b/libbs2b/3.1.0/libbs2b-3.1.0.tar.bz2"
     do_uninstall include/bs2b "${_check[@]}"
     # sndfile check is disabled since we don't compile binaries anyway
@@ -601,7 +606,7 @@ if [[ $sox = y ]] && do_pkgConfig "sox = 14.4.2"; then
 fi
 
 _check=(libopenmpt.{a,pc})
-if [[ $ffmpeg != n ]] && enabled libopenmpt &&
+if [[ $ffmpeg != "no" ]] && enabled libopenmpt &&
     do_vcs "svn::https://source.openmpt.org/svn/openmpt/trunk/OpenMPT/" openmpt; then
     do_uninstall include/libopenmpt "${_check[@]}"
     extracommands=(CONFIG="mingw64-win${bits%bit}" AR=ar STATIC_LIB=1 EXAMPLES=0 OPENMPT123=0
@@ -616,7 +621,7 @@ set_title "compiling video tools"
 echo -e "\n\t${orange}Starting $bits compilation of video tools${reset}"
 
 if [[ $rtmpdump = "y" ]] ||
-    { [[ $ffmpeg != "n" ]] && enabled librtmp; }; then
+    { [[ $ffmpeg != "no" ]] && enabled librtmp; }; then
     req=""
     pc_exists librtmp && req="$(pkg-config --print-requires "$(file_installed librtmp.pc)")"
     if enabled gnutls || [[ $rtmpdump = "y" && $license != "nonfree" ]]; then
@@ -696,7 +701,7 @@ fi
 
 _check=(libkvazaar.{,l}a kvazaar.pc kvazaar.h)
 [[ $standalone = y ]] && _check+=(bin-video/kvazaar.exe)
-if { [[ $other265 = "y" ]] || { [[ $ffmpeg != "n" ]] && enabled libkvazaar; }; } &&
+if { [[ $other265 = "y" ]] || { [[ $ffmpeg != "no" ]] && enabled libkvazaar; }; } &&
     do_vcs "https://github.com/ultravideo/kvazaar.git"; then
     do_uninstall kvazaar_version.h "${_check[@]}"
     do_autogen
@@ -745,7 +750,7 @@ if [[ $mplayer = "y" ]] || ! mpv_disabled_all dvdread dvdnav; then
 fi
 
 _check=(libbluray.{{l,}a,pc})
-if { { [[ $ffmpeg != "n" ]] && enabled libbluray; } || ! mpv_disabled libbluray; } &&
+if { { [[ $ffmpeg != "no" ]] && enabled libbluray; } || ! mpv_disabled libbluray; } &&
     do_vcs "https://git.videolan.org/git/libbluray.git"; then
     [[ -f contrib/libudfread/.git ]] || log git.submodule git submodule update --init
     do_autoreconf
@@ -756,7 +761,7 @@ if { { [[ $ffmpeg != "n" ]] && enabled libbluray; } || ! mpv_disabled libbluray;
 fi
 
 _check=(libxavs.a xavs.{h,pc})
-if [[ $ffmpeg != "n" ]] && enabled libxavs && do_pkgConfig "xavs = 0.1." "0.1" &&
+if [[ $ffmpeg != "no" ]] && enabled libxavs && do_pkgConfig "xavs = 0.1." "0.1" &&
     do_vcs "https://github.com/Distrotech/xavs.git"; then
     [[ -f "libxavs.a" ]] && log "distclean" make distclean
     do_uninstall "${_check[@]}"
@@ -803,7 +808,7 @@ if [[ $mediainfo = "y" ]]; then
 fi
 
 _check=(libvidstab.a vidstab.pc)
-if [[ $ffmpeg != "n" ]] && enabled libvidstab && do_pkgConfig "vidstab = 1.10" &&
+if [[ $ffmpeg != "no" ]] && enabled libvidstab && do_pkgConfig "vidstab = 1.10" &&
     do_vcs "https://github.com/georgmartius/vid.stab.git" vidstab; then
     do_uninstall include/vid.stab "${_check[@]}"
     do_cmakeinstall
@@ -812,7 +817,7 @@ if [[ $ffmpeg != "n" ]] && enabled libvidstab && do_pkgConfig "vidstab = 1.10" &
 fi
 
 _check=(libzvbi.{h,{l,}a})
-if [[ $ffmpeg != "n" ]] && enabled libzvbi &&
+if [[ $ffmpeg != "no" ]] && enabled libzvbi &&
     { ! files_exist "${_check[@]}" || ! grep -q "0.2.35" "$LOCALDESTDIR/lib/libzvbi.a"; }; then
     do_wget_sf -h 95e53eb208c65ba6667fd4341455fa27 \
         "zapping/zvbi/0.2.35/zvbi-0.2.35.tar.bz2"
@@ -827,14 +832,14 @@ if [[ $ffmpeg != "n" ]] && enabled libzvbi &&
 fi
 
 _check=(frei0r.{h,pc})
-if [[ $ffmpeg != "n" ]] && enabled frei0r && do_vcs https://github.com/dyne/frei0r.git; then
+if [[ $ffmpeg != "no" ]] && enabled frei0r && do_vcs https://github.com/dyne/frei0r.git; then
     sed -i 's/find_package (Cairo)//' "CMakeLists.txt"
     do_uninstall lib/frei0r-1 "${_check[@]}"
     do_cmakeinstall
     do_checkIfExist
 fi
 
-if [[ $ffmpeg != "n" ]] && enabled decklink; then
+if [[ $ffmpeg != "no" ]] && enabled decklink; then
     _check=(DeckLinkAPI.h
            DeckLinkAPIVersion.h
            DeckLinkAPI_i.c)
@@ -866,7 +871,7 @@ if [[ $ffmpeg != "n" ]] && enabled decklink; then
 fi
 
 _check=(libmfx.{{l,}a,pc})
-if [[ $ffmpeg != "n" ]] && enabled libmfx &&
+if [[ $ffmpeg != "no" ]] && enabled libmfx &&
     do_vcs "https://github.com/lu-zero/mfx_dispatch.git" libmfx; then
     do_autoreconf
     do_uninstall include/mfx "${_check[@]}"
@@ -898,8 +903,8 @@ if [[ $x264 != n ]]; then
             do_vcs "https://git.ffmpeg.org/ffmpeg.git"
             do_uninstall "${_check[@]}" include/libav{codec,device,filter,format,util,resample} \
                 include/lib{sw{scale,resample},postproc} \
-                libav{codec,device,filter,format,util,resample}.{a,pc} \
-                lib{sw{scale,resample},postproc}.{a,pc}
+                libav{codec,device,filter,format,util,resample}.{dll.a,a,pc} \
+                lib{sw{scale,resample},postproc}.{dll,a,pc}
             [[ -f "config.mak" ]] && log "distclean" make distclean
             create_build_dir light
             LDFLAGS+=" -L$LOCALDESTDIR/lib -L$MINGW_PREFIX/lib" \
@@ -974,7 +979,8 @@ if [[ ! $x265 = "n" ]] && do_vcs "hg::https://bitbucket.org/multicoreware/x265";
     do_uninstall libx265{_main10,_main12}.a bin-video/libx265_main{10,12}.dll "${_check[@]}"
     [[ $bits = "32bit" ]] && assembly="-DENABLE_ASSEMBLY=OFF"
     [[ $xpcomp = "y" ]] && xpsupport="-DWINXP_SUPPORT=ON"
-    sed -ri 's|("-lc") ("-lpthread")|\1 "-lmingwex" \2|' source/CMakeLists.txt
+    implicitlibs="$(printf '"%s" ' -lmingwex -lmingwthrd -lmingw32 -lmoldname -lmsvcrt -ladvapi32 -lshell32 -luser32 -lkernel32)"
+    sed -ri "s|(\"-lc\").*(\"-lpthread\")|\1 ${implicitlibs} \2|" source/CMakeLists.txt
 
     build_x265() {
         create_build_dir
@@ -1056,7 +1062,7 @@ else
 fi
 pc_exists x265 && sed -i 's|-lmingwex||g' "$(file_installed x265.pc)"
 
-if [[ $ffmpeg != "n" ]]; then
+if [[ $ffmpeg != "no" ]]; then
     enabled libschroedinger && do_pacman_install schroedinger
     enabled libgsm && do_pacman_install gsm
     enabled libsnappy && do_addOption --extra-libs=-lstdc++ && do_pacman_install snappy
@@ -1079,7 +1085,7 @@ if [[ $ffmpeg != "n" ]]; then
         do_pacman_install netcdf
         sed -i 's/-lhdf5 -lz/-lhdf5 -lszip -lz/' "$MINGW_PREFIX"/lib/pkgconfig/netcdf.pc
     fi
-    ! disabled_any sdl2 ffplay && do_pacman_install SDL2
+    disabled_any sdl2 ffplay || do_pacman_install SDL2
     enabled libopenjpeg && do_pacman_install openjpeg2
     enabled libopenh264 && do_pacman_install openh264
     enabled chromaprint && do_addOption --extra-cflags=-DCHROMAPRINT_NODLL --extra-libs=-lstdc++ &&
@@ -1087,11 +1093,13 @@ if [[ $ffmpeg != "n" ]]; then
 
     do_hide_all_sharedlibs
 
-    if [[ $ffmpeg = "s" ]]; then
-        _check=(bin-video/ffmpegSHARED)
+    _check=(libavutil.pc)
+    disabled_any avfilter ffmpeg || _check+=(bin-video/ffmpeg.exe)
+    if [[ $ffmpeg = "shared" ]]; then
+        _check+=(libavutil.dll.a)
     else
-        _check=(libavutil.{a,pc})
-        disabled_any avfilter ffmpeg || _check+=(bin-video/ffmpeg.exe)
+        _check+=(libavutil.a)
+        [[ $ffmpeg = "both" ]] && _check+=(bin-video/ffmpegSHARED)
     fi
     [[ $ffmpegUpdate = y ]] && enabled_any lib{ass,x264,x265,vpx} &&
         _deps=(lib{ass,x264,x265,vpx}.a)
@@ -1106,36 +1114,47 @@ if [[ $ffmpeg != "n" ]]; then
 
         _uninstall=(include/libav{codec,device,filter,format,util,resample}
             include/lib{sw{scale,resample},postproc}
-            libav{codec,device,filter,format,util,resample}.{a,pc}
-            lib{sw{scale,resample},postproc}.{a,pc})
+            libav{codec,device,filter,format,util,resample}.{dll.a,a,pc}
+            lib{sw{scale,resample},postproc}.{a,pc}
+            "$LOCALDESTDIR"/lib/av{codec,device,filter,format,util}-*.def
+            "$LOCALDESTDIR"/lib/sw{scale,resample}-*.def
+            "$LOCALDESTDIR"/bin-video/av{codec,device,filter,format,util}-*.dll
+            "$LOCALDESTDIR"/bin-video/sw{scale,resample}-*.dll
+            )
         _check=()
-        sedflags="prefix|bindir|extra-(cflags|libs|ldflags|version)|pkg-config-flags"
+        sedflags="prefix|bindir|extra-version|pkg-config-flags"
+
+        if [[ $ffmpeg = "both" ]]; then
+            _check+=(bin-video/ffmpegSHARED/lib/libavutil.dll.a)
+            FFMPEG_OPTS_SHARED+=(--prefix="$LOCALDESTDIR/bin-video/ffmpegSHARED")
+        elif [[ $ffmpeg = "shared" ]]; then
+            _check+=(libavutil.{dll.a,pc})
+            FFMPEG_OPTS_SHARED+=(--prefix="$LOCALDESTDIR"
+                --bindir="$LOCALDESTDIR/bin-video"
+                --shlibdir="$LOCALDESTDIR/bin-video")
+        fi
+        enabled_any debug "debug=gdb" &&
+            ffmpeg_cflags="$(echo $CFLAGS | sed -r 's/ (-O[1-3]|-mtune=\S+)//g')"
 
         # shared
-        if [[ $ffmpeg != "y" ]] && _check+=(bin-video/ffmpegSHARED) &&
-            [[ ! -f build_successful${bits}_shared ]]; then
+        if [[ $ffmpeg != "static" ]] && [[ ! -f build_successful${bits}_shared ]]; then
             do_print_progress "Compiling ${bold}shared${reset} FFmpeg"
-            [[ -f config.mak ]] && log "distclean" make distclean
             do_uninstall bin-video/ffmpegSHARED "${_uninstall[@]}"
+            [[ -f config.mak ]] && log "distclean" make distclean
             create_build_dir shared
+            CFLAGS="${ffmpeg_cflags:-$CFLAGS}" \
             LDFLAGS+=" -L$LOCALDESTDIR/lib -L$MINGW_PREFIX/lib" \
-                log configure ../configure --prefix="$LOCALDESTDIR/bin-video/ffmpegSHARED" \
+                log configure ../configure \
                 --disable-static --enable-shared "${FFMPEG_OPTS_SHARED[@]}"
             # cosmetics
             sed -ri "s/ ?--($sedflags)=(\S+[^\" ]|'[^']+')//g" config.h
             do_make && do_makeinstall
-            if ! disabled_any programs avcodec avformat; then
-                if ! disabled swresample; then
-                    disabled_any avfilter ffmpeg || _check+=(bin-video/ffmpegSHARED/bin/ffmpeg.exe)
-                fi
-                disabled ffprobe || _check+=(bin-video/ffmpegSHARED/bin/ffprobe.exe)
-            fi
             cd_safe ..
             files_exist "${_check[@]}" && touch "build_successful${bits}_shared"
         fi
 
         # static
-        if [[ $ffmpeg != "s" ]] && _check+=(libavutil.{a,pc}); then
+        if [[ $ffmpeg != "shared" ]] && _check=(libavutil.{a,pc}); then
             do_print_progress "Compiling ${bold}static${reset} FFmpeg"
             [[ -f config.mak ]] && log "distclean" make distclean
             if ! disabled_any programs avcodec avformat; then
@@ -1147,19 +1166,21 @@ if [[ $ffmpeg != "n" ]]; then
             fi
             do_uninstall bin-video/ff{mpeg,play,probe}.exe{,.debug} "${_uninstall[@]}"
             create_build_dir static
+            CFLAGS="${ffmpeg_cflags:-$CFLAGS}" \
             LDFLAGS+=" -L$LOCALDESTDIR/lib -L$MINGW_PREFIX/lib" \
                 log configure ../configure --prefix="$LOCALDESTDIR" \
                 --bindir="$LOCALDESTDIR/bin-video" "${FFMPEG_OPTS[@]}"
             # cosmetics
             sed -ri "s/ ?--($sedflags)=(\S+[^\" ]|'[^']+')//g" config.h
-            do_make && do_makeinstall
-            enabled debug &&
+            enabled_any debug "debug=gdb" &&
                 create_debug_link "$LOCALDESTDIR"/bin-video/ff{mpeg,probe,play}.exe
+            do_make && do_makeinstall
             cd_safe ..
-            disabled_any avfilter ffmpeg ||
-                create_winpty_exe ffmpeg "$LOCALDESTDIR"/bin-video/
         fi
         do_checkIfExist
+        [[ -f "$LOCALDESTDIR"/bin-video/ffmpeg.exe ]] &&
+            create_winpty_exe ffmpeg "$LOCALDESTDIR"/bin-video/
+        unset ffmpeg_cflags
     fi
 fi
 
@@ -1170,7 +1191,7 @@ if [[ $mplayer = "y" ]] &&
     do_uninstall "${_check[@]}"
     [[ -f config.mak ]] && log "distclean" make distclean
     if [[ ! -d ffmpeg ]]; then
-        if [[ "$ffmpeg" != "n" ]] &&
+        if [[ "$ffmpeg" != "no" ]] &&
             git clone -q "$LOCALBUILDDIR"/ffmpeg-git ffmpeg; then
             pushd ffmpeg >/dev/null
             git checkout -qf --no-track -B master origin/HEAD
@@ -1346,13 +1367,13 @@ if [[ $xpcomp = "n" && $mpv != "n" ]] && pc_exists libavcodec libavformat libsws
 
         # for purely cosmetic reasons, show the last release version when doing -V
         git tag -l --sort=version:refname | tail -1 | cut -c 2- > VERSION
-
+        files_exist libavutil.a && MPV_OPTS+=(--enable-static-build)
         CFLAGS+=" ${mpv_cflags[*]}" LDFLAGS+=" ${mpv_ldflags[*]}" \
             RST2MAN="${MINGW_PREFIX}/bin/rst2man3" \
             RST2HTML="${MINGW_PREFIX}/bin/rst2html3" \
             RST2PDF="${MINGW_PREFIX}/bin/rst2pdf" \
             log configure /usr/bin/python waf configure \
-            "--prefix=$LOCALDESTDIR" "--bindir=$LOCALDESTDIR/bin-video" --enable-static-build \
+            "--prefix=$LOCALDESTDIR" "--bindir=$LOCALDESTDIR/bin-video" \
             --disable-vapoursynth-lazy "${MPV_OPTS[@]}"
 
         # Windows(?) has a lower argument limit than *nix so
@@ -1384,7 +1405,7 @@ if [[ $bmx = "y" ]]; then
     do_pacman_install uriparser
 
     _check=(bin-video/MXFDump.exe libMXF-1.0.{{,l}a,pc})
-    if do_vcs http://git.code.sf.net/p/bmxlib/libmxf libMXF-1.0; then
+    if do_vcs https://notabug.org/RiCON/libmxf.git libMXF-1.0; then
         do_autogen
         do_uninstall include/libMXF-1.0 "${_check[@]}"
         do_separate_confmakeinstall video --disable-examples
@@ -1393,7 +1414,7 @@ if [[ $bmx = "y" ]]; then
 
     _check=(libMXF++-1.0.{{,l}a,pc})
     _deps=(libMXF-1.0.a)
-    if do_vcs http://git.code.sf.net/p/bmxlib/libmxfpp libMXF++-1.0; then
+    if do_vcs https://notabug.org/RiCON/libmxfpp.git libMXF++-1.0; then
         do_autogen
         do_uninstall include/libMXF++-1.0 "${_check[@]}"
         do_separate_confmakeinstall video --disable-examples
@@ -1402,7 +1423,7 @@ if [[ $bmx = "y" ]]; then
 
     _check=(bin-video/{bmxtranswrap,{h264,mov,vc2}dump,mxf2raw,raw2bmx}.exe)
     _deps=("$MINGW_PREFIX"/lib/liburiparser.a,lib{MXF{,++}-1.0,curl}.a)
-    if do_vcs http://git.code.sf.net/p/bmxlib/bmx; then
+    if do_vcs https://notabug.org/RiCON/bmx.git; then
         do_autogen
         do_uninstall libbmx-0.1.{{,l}a,pc} bin-video/bmxparse.exe \
             include/bmx-0.1 "${_check[@]}"
